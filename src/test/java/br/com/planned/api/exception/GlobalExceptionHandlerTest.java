@@ -60,7 +60,10 @@ class GlobalExceptionHandlerTest {
 			"EMAIL_ALREADY_USED, 409",
 			"AI_INVALID_RESPONSE, 422",
 			"AI_RATE_LIMITED, 429",
-			"AI_UNAVAILABLE, 503" })
+			"AI_UNAVAILABLE, 503",
+			"METHOD_NOT_ALLOWED, 405",
+			"UNSUPPORTED_MEDIA_TYPE, 415",
+			"INTERNAL_ERROR, 500" })
 	void apiExceptionReturnsItsCodeAndStatus(ErrorCode code, int expectedStatus) throws Exception {
 		mockMvc.perform(get("/probe/api-exception/{code}", code))
 				.andExpect(status().is(expectedStatus))
@@ -118,13 +121,19 @@ class GlobalExceptionHandlerTest {
 	}
 
 	@Test
+	void missingRequestParamReturnsValidationError() throws Exception {
+		mockMvc.perform(get("/probe/param"))
+				.andExpect(validationError());
+	}
+
+	@Test
 	void wrongMethodReturnsMethodNotAllowed() throws Exception {
 		mockMvc.perform(post("/probe/param"))
 				.andExpect(status().isMethodNotAllowed())
 				.andExpect(header().string(HttpHeaders.ALLOW, "GET"))
 				.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
 				.andExpect(jsonPath("$.status").value(405))
-				.andExpect(jsonPath("$.code").doesNotExist());
+				.andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"));
 	}
 
 	@Test
@@ -133,7 +142,7 @@ class GlobalExceptionHandlerTest {
 				.andExpect(status().isUnsupportedMediaType())
 				.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
 				.andExpect(jsonPath("$.status").value(415))
-				.andExpect(jsonPath("$.code").doesNotExist());
+				.andExpect(jsonPath("$.code").value("UNSUPPORTED_MEDIA_TYPE"));
 	}
 
 	@Test
@@ -143,7 +152,7 @@ class GlobalExceptionHandlerTest {
 				.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
 				.andExpect(jsonPath("$.status").value(500))
 				.andExpect(jsonPath("$.detail").value("An unexpected error occurred"))
-				.andExpect(jsonPath("$.code").doesNotExist())
+				.andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
 				.andExpect(content().string(not(containsString("internal secret"))));
 	}
 

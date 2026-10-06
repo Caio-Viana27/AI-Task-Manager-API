@@ -5,7 +5,6 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.springframework.beans.TypeMismatchException;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -24,8 +23,7 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
  * {@link ValidationError}.
  *
  * <p>Extends {@link ResponseEntityExceptionHandler} so Spring MVC's own exceptions (405, 415, ...)
- * are rendered as {@code ProblemDetail} too. Those, and unexpected 500s, have no {@code code}:
- * PLAN §2 doesn't define one, so the UI falls back to the status.
+ * are rendered as {@code ProblemDetail} too, with a {@code code} derived from their status.
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
@@ -48,7 +46,39 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 	@ExceptionHandler(Exception.class)
 	ProblemDetail handleUnexpected(Exception ex) {
 		logger.error("Unhandled exception", ex);
-		return ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+				ErrorCode.INTERNAL_ERROR.status(), "An unexpected error occurred");
+		problem.setProperty(CODE, ErrorCode.INTERNAL_ERROR.name());
+		return problem;
+	}
+
+	/** Adds a {@code code} to the {@code ProblemDetail} of Spring MVC's own exceptions. */
+	@Override
+	protected @Nullable ResponseEntity<Object> handleExceptionInternal(
+			Exception ex, @Nullable Object body, HttpHeaders headers, HttpStatusCode statusCode, WebRequest request) {
+		ResponseEntity<Object> response = super.handleExceptionInternal(ex, body, headers, statusCode, request);
+		if (response != null && response.getBody() instanceof ProblemDetail problem && !hasCode(problem)) {
+			ErrorCode code = codeFor(statusCode);
+			if (code != null) {
+				problem.setProperty(CODE, code.name());
+			}
+		}
+		return response;
+	}
+
+	private static boolean hasCode(ProblemDetail problem) {
+		return problem.getProperties() != null && problem.getProperties().containsKey(CODE);
+	}
+
+	/** Statuses Spring MVC produces on its own, e.g. a missing required parameter (400). */
+	private static @Nullable ErrorCode codeFor(HttpStatusCode status) {
+		return switch (status.value()) {
+			case 400 -> ErrorCode.VALIDATION_ERROR;
+			case 405 -> ErrorCode.METHOD_NOT_ALLOWED;
+			case 415 -> ErrorCode.UNSUPPORTED_MEDIA_TYPE;
+			case 500 -> ErrorCode.INTERNAL_ERROR;
+			default -> null;
+		};
 	}
 
 	/** {@code @Valid @RequestBody} failed. */
