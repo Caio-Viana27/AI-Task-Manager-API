@@ -5,6 +5,7 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.springframework.beans.TypeMismatchException;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -23,7 +24,8 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
  * {@link ValidationError}.
  *
  * <p>Extends {@link ResponseEntityExceptionHandler} so Spring MVC's own exceptions (405, 415, ...)
- * are rendered as {@code ProblemDetail} too.
+ * are rendered as {@code ProblemDetail} too. Those, and unexpected 500s, have no {@code code}:
+ * PLAN §2 doesn't define one, so the UI falls back to the status.
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
@@ -37,6 +39,16 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 		problem.setDetail(ex.getMessage());
 		problem.setProperty(CODE, ex.getCode().name());
 		return problem;
+	}
+
+	/**
+	 * Anything no other handler covers is a bug. Log it and return a generic 500, never the
+	 * exception's message, which may expose internals.
+	 */
+	@ExceptionHandler(Exception.class)
+	ProblemDetail handleUnexpected(Exception ex) {
+		logger.error("Unhandled exception", ex);
+		return ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
 	}
 
 	/** {@code @Valid @RequestBody} failed. */

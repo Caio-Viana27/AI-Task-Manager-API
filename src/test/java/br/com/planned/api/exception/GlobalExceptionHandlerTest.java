@@ -1,10 +1,13 @@
 package br.com.planned.api.exception;
 
 import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -23,6 +26,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultMatcher;
@@ -113,6 +117,36 @@ class GlobalExceptionHandlerTest {
 				.andExpect(jsonPath("$.errors").doesNotExist());
 	}
 
+	@Test
+	void wrongMethodReturnsMethodNotAllowed() throws Exception {
+		mockMvc.perform(post("/probe/param"))
+				.andExpect(status().isMethodNotAllowed())
+				.andExpect(header().string(HttpHeaders.ALLOW, "GET"))
+				.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(405))
+				.andExpect(jsonPath("$.code").doesNotExist());
+	}
+
+	@Test
+	void unsupportedContentTypeReturnsUnsupportedMediaType() throws Exception {
+		mockMvc.perform(post("/probe/body").contentType(MediaType.TEXT_PLAIN).content("title"))
+				.andExpect(status().isUnsupportedMediaType())
+				.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(415))
+				.andExpect(jsonPath("$.code").doesNotExist());
+	}
+
+	@Test
+	void unexpectedExceptionReturnsGenericInternalServerError() throws Exception {
+		mockMvc.perform(get("/probe/unexpected"))
+				.andExpect(status().isInternalServerError())
+				.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(500))
+				.andExpect(jsonPath("$.detail").value("An unexpected error occurred"))
+				.andExpect(jsonPath("$.code").doesNotExist())
+				.andExpect(content().string(not(containsString("internal secret"))));
+	}
+
 	private static ResultMatcher validationError() {
 		List<ResultMatcher> matchers = List.of(
 				status().isBadRequest(),
@@ -144,6 +178,11 @@ class GlobalExceptionHandlerTest {
 
 		@GetMapping("/probe/param")
 		void param(@RequestParam @Max(100) int size) {
+		}
+
+		@GetMapping("/probe/unexpected")
+		void unexpected() {
+			throw new IllegalStateException("internal secret");
 		}
 
 		@GetMapping("/probe/tasks/{id}")
