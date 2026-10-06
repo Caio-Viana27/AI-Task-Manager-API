@@ -3,6 +3,7 @@ package br.com.planned.api.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -14,6 +15,7 @@ import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 /**
  * Wave 0 security: opens only the healthcheck and the API docs.
  * Everything else requires authentication. Wave 1 replaces this with JWT.
+ * CORS comes from the {@link CorsConfig} bean when it is present.
  */
 @Configuration
 public class SecurityConfig {
@@ -21,6 +23,7 @@ public class SecurityConfig {
 	@Bean
 	SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 		return http
+				.cors(Customizer.withDefaults())
 				.csrf(AbstractHttpConfigurer::disable)
 				.httpBasic(AbstractHttpConfigurer::disable)
 				.formLogin(AbstractHttpConfigurer::disable)
