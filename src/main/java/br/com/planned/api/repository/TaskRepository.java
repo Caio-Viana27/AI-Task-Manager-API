@@ -1,5 +1,7 @@
 package br.com.planned.api.repository;
 
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -16,6 +18,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import br.com.planned.api.entity.Task;
+import br.com.planned.api.entity.TaskStatus;
 
 /** Every lookup is scoped to the owner: another user's task is never found (PLAN §2, 404). */
 public interface TaskRepository extends JpaRepository<Task, UUID>, JpaSpecificationExecutor<Task> {
@@ -86,4 +89,18 @@ public interface TaskRepository extends JpaRepository<Task, UUID>, JpaSpecificat
 	@Modifying(clearAutomatically = true, flushAutomatically = true)
 	@Query("DELETE FROM Task t WHERE t.id = :id AND t.user.id = :userId")
 	int deleteByIdAndUserId(@Param("id") UUID id, @Param("userId") UUID userId);
+
+	/**
+	 * Sets {@code overdue} on every task with one of the {@code active} statuses that was due
+	 * before {@code today}, for every user (the nightly job, PLAN §2).
+	 *
+	 * @return the number of tasks changed
+	 */
+	@Modifying(clearAutomatically = true, flushAutomatically = true)
+	@Query("""
+			UPDATE Task t SET t.status = :overdue, t.updatedAt = :now
+			WHERE t.status IN :active AND t.dueDate < :today
+			""")
+	int markOverdue(@Param("overdue") TaskStatus overdue, @Param("active") Collection<TaskStatus> active,
+			@Param("today") LocalDate today, @Param("now") Instant now);
 }
