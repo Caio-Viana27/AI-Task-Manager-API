@@ -19,7 +19,8 @@ class JwtConfigTest {
 					"app.jwt.ttl=60m",
 					"app.ai.timeout=20s",
 					"app.ai.quota-per-hour=30",
-					"app.cors.allowed-origins=http://localhost:5173");
+					"app.cors.allowed-origins=http://localhost:5173",
+					"app.tasks.max-depth=5");
 
 	@Test
 	void startupFailsWithA31ByteSecret() {
