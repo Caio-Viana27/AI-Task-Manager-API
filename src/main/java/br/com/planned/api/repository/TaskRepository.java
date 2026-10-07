@@ -64,6 +64,10 @@ public interface TaskRepository extends JpaRepository<Task, UUID>, JpaSpecificat
 			""")
 	List<Task> findChildren(@Param("parentId") UUID parentId, @Param("userId") UUID userId);
 
+	/** The highest {@code POSITION} among the task's direct children, or 0 if it has none (wave 2, D5). */
+	@Query("SELECT COALESCE(MAX(t.position), 0) FROM Task t WHERE t.parent.id = :parentId")
+	int maxChildPosition(@Param("parentId") UUID parentId);
+
 	/** The number of direct children of each given task, in one query. Tasks with none are left out. */
 	@Query("""
 			SELECT new br.com.planned.api.repository.SubtaskCount(t.parent.id, COUNT(t))
