@@ -1,10 +1,12 @@
 package br.com.planned.api.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -35,4 +37,36 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
 			SELECT id, title FROM ancestors ORDER BY level DESC
 			""")
 	List<TaskAncestor> findAncestors(@Param("taskId") UUID taskId, @Param("userId") UUID userId);
+
+	/**
+	 * The direct children of a task, with their priority and status loaded, in sibling order:
+	 * {@code POSITION}, then {@code createdAt}, then {@code id} (wave 2, D5).
+	 */
+	@Query("""
+			SELECT t FROM Task t
+			JOIN FETCH t.priority
+			JOIN FETCH t.status
+			WHERE t.parent.id = :parentId AND t.user.id = :userId
+			ORDER BY t.position, t.createdAt, t.id
+			""")
+	List<Task> findChildren(@Param("parentId") UUID parentId, @Param("userId") UUID userId);
+
+	/** The number of direct children of each given task, in one query. Tasks with none are left out. */
+	@Query("""
+			SELECT new br.com.planned.api.repository.SubtaskCount(t.parent.id, COUNT(t))
+			FROM Task t
+			WHERE t.parent.id IN :parentIds
+			GROUP BY t.parent.id
+			""")
+	List<SubtaskCount> countChildren(@Param("parentIds") Collection<UUID> parentIds);
+
+	/**
+	 * Deletes the task if {@code userId} owns it. One statement: the {@code ON DELETE CASCADE} on
+	 * {@code PARENT_TASK_ID} removes the whole subtree (wave 2, D1).
+	 *
+	 * @return the number of tasks deleted directly (0 or 1), not counting the subtree
+	 */
+	@Modifying(clearAutomatically = true, flushAutomatically = true)
+	@Query("DELETE FROM Task t WHERE t.id = :id AND t.user.id = :userId")
+	int deleteByIdAndUserId(@Param("id") UUID id, @Param("userId") UUID userId);
 }

@@ -33,4 +33,15 @@ public final class TestRows {
 				""", id, userId, parentId, title);
 		return id;
 	}
+
+	/**
+	 * Deletes the given users and all their tasks. Use it after tests that commit rows: other
+	 * tests delete every user, which fails while a task still references one.
+	 */
+	public static void deleteUsersAndTasks(JdbcTemplate jdbc, UUID... userIds) {
+		for (UUID userId : userIds) {
+			jdbc.update("DELETE FROM TASK WHERE USER_ID = ?", userId);
+			jdbc.update("DELETE FROM USERS WHERE ID = ?", userId);
+		}
+	}
 }
