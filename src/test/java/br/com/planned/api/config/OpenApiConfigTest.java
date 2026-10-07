@@ -27,4 +27,16 @@ class OpenApiConfigTest extends IntegrationTest {
 				.andExpect(jsonPath("$.components.securitySchemes.bearerAuth.bearerFormat").value("JWT"))
 				.andExpect(jsonPath("$.security[0].bearerAuth").isArray());
 	}
+
+	@Test
+	void signUpAndSignInArePublicInTheDocs() throws Exception {
+		mockMvc.perform(get("/v3/api-docs"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.paths['/api/v1/auth/signup'].post.security").isEmpty())
+				.andExpect(jsonPath("$.paths['/api/v1/auth/signin'].post.security").isEmpty())
+				.andExpect(jsonPath("$.paths['/api/v1/auth/signup'].post.responses['409']").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/auth/signin'].post.responses['401']").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/users/me'].get.security").doesNotExist())
+				.andExpect(jsonPath("$.paths['/api/v1/users/me'].get.responses['401']").exists());
+	}
 }
