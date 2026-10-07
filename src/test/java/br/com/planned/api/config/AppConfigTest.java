@@ -21,7 +21,8 @@ class AppConfigTest {
 					"app.jwt.ttl=60m",
 					"app.ai.timeout=20s",
 					"app.ai.quota-per-hour=30",
-					"app.cors.allowed-origins=http://localhost:5173,https://planned.example");
+					"app.cors.allowed-origins=http://localhost:5173,https://planned.example",
+					"app.tasks.max-depth=5");
 
 	@Test
 	void appPropertiesBindEveryValue() {
@@ -35,6 +36,7 @@ class AppConfigTest {
 			assertThat(properties.ai().quotaPerHour()).isEqualTo(30);
 			assertThat(properties.cors().allowedOrigins())
 					.containsExactly("http://localhost:5173", "https://planned.example");
+			assertThat(properties.tasks().maxDepth()).isEqualTo(5);
 		});
 	}
 
@@ -68,5 +70,14 @@ class AppConfigTest {
 						.rootCause()
 						.isInstanceOf(BindValidationException.class)
 						.hasMessageContaining("cors.allowedOrigins"));
+	}
+
+	@Test
+	void startupFailsWithMaxDepthBelowOne() {
+		contextRunner.withPropertyValues("app.tasks.max-depth=0")
+				.run(context -> assertThat(context).getFailure()
+						.rootCause()
+						.isInstanceOf(BindValidationException.class)
+						.hasMessageContaining("tasks.maxDepth"));
 	}
 }

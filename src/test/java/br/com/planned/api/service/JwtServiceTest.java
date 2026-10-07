@@ -100,7 +100,8 @@ class JwtServiceTest {
 				ZoneId.of("America/Sao_Paulo"),
 				new AppProperties.Jwt(SECRET, TTL),
 				new AppProperties.Ai(Duration.ofSeconds(20), 30),
-				new AppProperties.Cors(List.of("http://localhost:5173")));
+				new AppProperties.Cors(List.of("http://localhost:5173")),
+				new AppProperties.Tasks(5));
 	}
 
 	private static User user() {
