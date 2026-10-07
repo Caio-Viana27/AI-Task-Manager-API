@@ -5,7 +5,12 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,9 +18,17 @@ import org.springframework.data.repository.query.Param;
 import br.com.planned.api.entity.Task;
 
 /** Every lookup is scoped to the owner: another user's task is never found (PLAN §2, 404). */
-public interface TaskRepository extends JpaRepository<Task, UUID> {
+public interface TaskRepository extends JpaRepository<Task, UUID>, JpaSpecificationExecutor<Task> {
 
 	Optional<Task> findByIdAndUserId(UUID id, UUID userId);
+
+	/**
+	 * A page of tasks with their lookups loaded, so the page costs two queries (rows and count),
+	 * however many tasks it holds. {@code spec} must include the owner ({@link TaskSpecifications}).
+	 */
+	@Override
+	@EntityGraph(attributePaths = { "priority", "status", "complexity" })
+	Page<Task> findAll(Specification<Task> spec, Specification<Task> countSpec, Pageable pageable);
 
 	/**
 	 * The path from the top-level task down to the task's direct parent, root first (wave 2, D1).
