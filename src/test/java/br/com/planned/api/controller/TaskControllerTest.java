@@ -261,10 +261,10 @@ class TaskControllerTest extends IntegrationTest {
 		UUID parent = TestRows.insertTask(jdbc, ana, null, "Parent");
 		UUID later = TestRows.insertTask(jdbc, ana, parent, "Later");
 		UUID earlier = TestRows.insertTask(jdbc, ana, parent, "Earlier");
-		jdbc.update("UPDATE TASK SET CREATED_AT = ? WHERE ID = ?", Timestamp.valueOf("2026-10-01 10:00:00"),
-				earlier);
-		jdbc.update("UPDATE TASK SET CREATED_AT = ? WHERE ID = ?", Timestamp.valueOf("2026-10-02 10:00:00"),
-				later);
+		jdbc.update("UPDATE TASK SET CREATED_AT = ?, UPDATED_AT = ? WHERE ID = ?",
+				Timestamp.valueOf("2026-10-01 10:00:00"), Timestamp.valueOf("2026-10-01 10:00:00"), earlier);
+		jdbc.update("UPDATE TASK SET CREATED_AT = ?, UPDATED_AT = ? WHERE ID = ?",
+				Timestamp.valueOf("2026-10-02 10:00:00"), Timestamp.valueOf("2026-10-02 10:00:00"), later);
 
 		perform(get("/api/v1/tasks/" + parent), ana)
 				.andExpect(jsonPath("$.subtasks[0].title").value("Earlier"))
