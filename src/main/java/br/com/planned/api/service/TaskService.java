@@ -36,6 +36,8 @@ import br.com.planned.api.repository.UserRepository;
  * <p>The building blocks other services need are public: {@link #loadOwned}, {@link #newTask},
  * {@link #depth}, {@link #canAddSubtasks}, {@link #requireCanAddSubtasks}, and
  * {@link #applyOverdueRule}.
+ *
+ * <p>Marking a task {@code DONE} completes its whole subtree (wave 2, D9).
  */
 @Service
 public class TaskService {
@@ -79,19 +81,21 @@ public class TaskService {
 	@Transactional
 	public TaskResponse update(UUID id, UpdateTaskRequest request) {
 		Task task = loadOwned(id);
+		boolean wasDone = isDone(task);
 		task.setTitle(request.title());
 		task.setDescription(request.description());
 		task.setDueDate(request.dueDate());
 		task.setPriority(lookupService.priority(request.priority()));
 		task.setStatus(userStatus(request.status()));
 		task.setComplexity(complexityOrNull(request.complexity()));
-		return save(task);
+		return saveAndCompleteSubtree(task, wasDone);
 	}
 
 	/** {@code PATCH}: changes only the fields that were sent (wave 2, D2). */
 	@Transactional
 	public TaskResponse patch(UUID id, PatchTaskRequest request) {
 		Task task = loadOwned(id);
+		boolean wasDone = isDone(task);
 		if (request.isPresent(PatchTaskRequest.TITLE)) {
 			task.setTitle(request.getTitle());
 		}
@@ -110,7 +114,7 @@ public class TaskService {
 		if (request.isPresent(PatchTaskRequest.COMPLEXITY)) {
 			task.setComplexity(complexityOrNull(request.getComplexity()));
 		}
-		return save(task);
+		return saveAndCompleteSubtree(task, wasDone);
 	}
 
 	/** Deletes the task and, through the database cascade, its whole subtree (wave 2, D1). */
@@ -198,6 +202,25 @@ public class TaskService {
 		applyOverdueRule(task);
 		task.setUpdatedAt(Instant.now(clock));
 		return TaskResponse.from(taskRepository.save(task));
+	}
+
+	/**
+	 * Saves an edited task. If the edit moved it to {@code DONE}, every descendant that isn't
+	 * {@code DONE} yet becomes {@code DONE} too, in one statement (wave 2, D9). Reopening a task
+	 * never touches its subtasks.
+	 */
+	private TaskResponse saveAndCompleteSubtree(Task task, boolean wasDone) {
+		// Built first: the bulk update clears the persistence context.
+		TaskResponse response = save(task);
+		if (!wasDone && isDone(task)) {
+			taskRepository.completeSubtree(task.getId(), task.getUser().getId(),
+					lookupService.status(TaskStatus.DONE).getId(), Instant.now(clock));
+		}
+		return response;
+	}
+
+	private static boolean isDone(Task task) {
+		return TaskStatus.DONE.equals(task.getStatus().getName());
 	}
 
 	/** Direct children in sibling order, each with its own child count, in two queries total. */

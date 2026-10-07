@@ -55,6 +55,29 @@ public interface TaskRepository extends JpaRepository<Task, UUID>, JpaSpecificat
 	List<TaskAncestor> findAncestors(@Param("taskId") UUID taskId, @Param("userId") UUID userId);
 
 	/**
+	 * Marks every descendant of the task, at every depth, {@code DONE} unless it already is, with
+	 * {@code updatedAt = now} (wave 2, D9). The task itself and its ancestors are untouched. Every
+	 * row is also filtered by {@code userId}, as a second guard.
+	 *
+	 * @return the number of descendants changed
+	 */
+	@Modifying(clearAutomatically = true, flushAutomatically = true)
+	@Query(nativeQuery = true, value = """
+			WITH RECURSIVE subtree (id) AS (
+			    SELECT id FROM task WHERE parent_task_id = :taskId AND user_id = :userId
+			  UNION ALL
+			    SELECT t.id
+			    FROM task t
+			    JOIN subtree s ON t.parent_task_id = s.id
+			    WHERE t.user_id = :userId
+			)
+			UPDATE task SET status_id = :doneStatusId, updated_at = :now
+			WHERE id IN (SELECT id FROM subtree) AND status_id <> :doneStatusId
+			""")
+	int completeSubtree(@Param("taskId") UUID taskId, @Param("userId") UUID userId,
+			@Param("doneStatusId") Integer doneStatusId, @Param("now") Instant now);
+
+	/**
 	 * The direct children of a task, with their priority and status loaded, in sibling order:
 	 * {@code POSITION}, then {@code createdAt}, then {@code id} (wave 2, D5).
 	 */

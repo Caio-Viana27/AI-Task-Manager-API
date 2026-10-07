@@ -71,7 +71,8 @@ public class TaskController {
 
 	@PutMapping("/{id}")
 	@Operation(summary = "Replace every editable field",
-			description = "A null dueDate or complexity clears it. OVERDUE can't be sent; the overdue rule runs after the update.")
+			description = "A null dueDate or complexity clears it. OVERDUE can't be sent; the overdue rule runs after the update. "
+					+ "Moving a task to DONE also marks its whole subtree DONE.")
 	@ApiResponse(responseCode = "200", description = "The updated task")
 	@ApiResponse(responseCode = "400", description = "VALIDATION_ERROR, INVALID_STATUS (including OVERDUE), INVALID_PRIORITY, or INVALID_COMPLEXITY",
 			content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
@@ -86,7 +87,8 @@ public class TaskController {
 	@PatchMapping("/{id}")
 	@Operation(summary = "Update only the fields that are sent",
 			description = "An absent field is unchanged. null clears dueDate or complexity; null for any other field is a 400. "
-					+ "OVERDUE can't be sent; the overdue rule runs after the update.")
+					+ "OVERDUE can't be sent; the overdue rule runs after the update. "
+					+ "Moving a task to DONE also marks its whole subtree DONE.")
 	@ApiResponse(responseCode = "200", description = "The updated task")
 	@ApiResponse(responseCode = "400", description = "VALIDATION_ERROR, INVALID_STATUS (including OVERDUE), INVALID_PRIORITY, or INVALID_COMPLEXITY",
 			content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))

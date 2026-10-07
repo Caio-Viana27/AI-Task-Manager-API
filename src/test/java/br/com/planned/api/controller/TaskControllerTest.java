@@ -595,6 +595,111 @@ class TaskControllerTest extends IntegrationTest {
 				.andExpect(jsonPath("$.status").value("TODO"));
 	}
 
+	// --- Completing a subtree (wave 2, D9) ---
+
+	@Test
+	void patchDone_completesTheWholeSubtree_atEveryDepth() throws Exception {
+		UUID root = TestRows.insertTask(jdbc, ana, null, "Root");
+		UUID child = TestRows.insertTask(jdbc, ana, root, "Child");
+		UUID grandchild = TestRows.insertTask(jdbc, ana, child, "Grandchild");
+		UUID greatGrandchild = TestRows.insertTask(jdbc, ana, grandchild, "Great-grandchild");
+		setStatus(grandchild, "IN_PROGRESS");
+		setStatus(greatGrandchild, "OVERDUE");
+
+		perform(patch("/api/v1/tasks/" + root), ana, "{ \"status\": \"DONE\" }")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("DONE"));
+
+		for (UUID task : List.of(child, grandchild, greatGrandchild)) {
+			perform(get("/api/v1/tasks/" + task), ana)
+					.andExpect(jsonPath("$.status").value("DONE"))
+					.andExpect(jsonPath("$.updatedAt").value("2026-10-07T15:00:00Z"));
+		}
+	}
+
+	@Test
+	void putDone_completesTheWholeSubtree() throws Exception {
+		UUID root = TestRows.insertTask(jdbc, ana, null, "Root");
+		UUID child = TestRows.insertTask(jdbc, ana, root, "Child");
+		UUID grandchild = TestRows.insertTask(jdbc, ana, child, "Grandchild");
+
+		perform(put("/api/v1/tasks/" + root), ana, fullBody("DONE", "MEDIUM", "null"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("DONE"));
+
+		assertThat(statusOf(child)).isEqualTo("DONE");
+		assertThat(statusOf(grandchild)).isEqualTo("DONE");
+	}
+
+	@Test
+	void completingASubtree_leavesSubtasksAlreadyDoneUntouched() throws Exception {
+		UUID root = TestRows.insertTask(jdbc, ana, null, "Root");
+		UUID done = TestRows.insertTask(jdbc, ana, root, "Done");
+		setStatus(done, "DONE");
+		String before = getBody(done);
+		CLOCK.advance(Duration.ofHours(1));
+
+		perform(patch("/api/v1/tasks/" + root), ana, "{ \"status\": \"DONE\" }").andExpect(status().isOk());
+
+		assertThat(getBody(done)).isEqualTo(before);
+	}
+
+	@Test
+	void doneMidLevelTask_leavesItsAncestorsAndSiblingsOpen() throws Exception {
+		UUID root = TestRows.insertTask(jdbc, ana, null, "Root");
+		UUID child = TestRows.insertTask(jdbc, ana, root, "Child");
+		UUID grandchild = TestRows.insertTask(jdbc, ana, child, "Grandchild");
+		UUID sibling = TestRows.insertTask(jdbc, ana, root, "Sibling");
+		UUID nephew = TestRows.insertTask(jdbc, ana, sibling, "Nephew");
+
+		perform(patch("/api/v1/tasks/" + child), ana, "{ \"status\": \"DONE\" }").andExpect(status().isOk());
+
+		assertThat(statusOf(grandchild)).isEqualTo("DONE");
+		assertThat(statusOf(root)).isEqualTo("TODO");
+		assertThat(statusOf(sibling)).isEqualTo("TODO");
+		assertThat(statusOf(nephew)).isEqualTo("TODO");
+	}
+
+	@Test
+	void reopeningADoneTask_leavesItsSubtasksDone() throws Exception {
+		UUID root = TestRows.insertTask(jdbc, ana, null, "Root");
+		UUID child = TestRows.insertTask(jdbc, ana, root, "Child");
+		perform(patch("/api/v1/tasks/" + root), ana, "{ \"status\": \"DONE\" }").andExpect(status().isOk());
+
+		perform(patch("/api/v1/tasks/" + root), ana, "{ \"status\": \"TODO\" }")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("TODO"));
+
+		assertThat(statusOf(child)).isEqualTo("DONE");
+	}
+
+	@Test
+	void editingATaskThatIsAlreadyDone_doesNotRecloseReopenedSubtasks() throws Exception {
+		UUID root = TestRows.insertTask(jdbc, ana, null, "Root");
+		UUID child = TestRows.insertTask(jdbc, ana, root, "Child");
+		perform(patch("/api/v1/tasks/" + root), ana, "{ \"status\": \"DONE\" }").andExpect(status().isOk());
+		perform(patch("/api/v1/tasks/" + child), ana, "{ \"status\": \"IN_PROGRESS\" }").andExpect(status().isOk());
+
+		perform(patch("/api/v1/tasks/" + root), ana, "{ \"title\": \"Renamed\" }").andExpect(status().isOk());
+		perform(patch("/api/v1/tasks/" + root), ana, "{ \"status\": \"DONE\" }").andExpect(status().isOk());
+		perform(put("/api/v1/tasks/" + root), ana, fullBody("DONE", "HIGH", "null")).andExpect(status().isOk());
+
+		assertThat(statusOf(child)).isEqualTo("IN_PROGRESS");
+	}
+
+	@Test
+	void completingASubtree_neverTouchesAnotherUsersTasks() throws Exception {
+		UUID root = TestRows.insertTask(jdbc, ana, null, "Root");
+		// Can't happen through the API (a subtask takes its parent's user); guards the query itself.
+		UUID bobsUnderAna = TestRows.insertTask(jdbc, bob, root, "Bob's");
+		UUID bobsRoot = TestRows.insertTask(jdbc, bob, null, "Bob's root");
+
+		perform(patch("/api/v1/tasks/" + root), ana, "{ \"status\": \"DONE\" }").andExpect(status().isOk());
+
+		assertThat(statusOf(bobsUnderAna)).isEqualTo("TODO");
+		assertThat(statusOf(bobsRoot)).isEqualTo("TODO");
+	}
+
 	// --- Delete ---
 
 	@Test
@@ -675,6 +780,22 @@ class TaskControllerTest extends IntegrationTest {
 
 	private static void expectNotFound(ResultActions result) throws Exception {
 		result.andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("TASK_NOT_FOUND"));
+	}
+
+	private void setStatus(UUID task, String status) {
+		jdbc.update("UPDATE TASK SET STATUS_ID = (SELECT ID FROM TASK_STATUS WHERE NAME = ?) WHERE ID = ?", status, task);
+	}
+
+	private String statusOf(UUID task) {
+		return jdbc.queryForObject(
+				"SELECT S.NAME FROM TASK T JOIN TASK_STATUS S ON S.ID = T.STATUS_ID WHERE T.ID = ?", String.class, task);
+	}
+
+	/** {@code GET /tasks/{id}} as Ana. */
+	private String getBody(UUID task) throws Exception {
+		return perform(get("/api/v1/tasks/" + task), ana)
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString();
 	}
 
 	private void setPosition(UUID task, int position) {
