@@ -100,6 +100,9 @@ class SubtaskControllerTest extends IntegrationTest {
 				.andExpect(jsonPath("$[1].dueDate").value("2026-10-31"))
 				.andExpect(jsonPath("$[1].priority").value("HIGH"))
 				.andExpect(jsonPath("$[1].complexity").value("EASY"))
+				// Subtask create takes no estimated hours (wave 4, D10).
+				.andExpect(jsonPath("$[0].estimatedHours").isEmpty())
+				.andExpect(jsonPath("$[1].estimatedHours").isEmpty())
 				// The overdue rule applies on create (wave 2, D4).
 				.andExpect(jsonPath("$[2].status").value("OVERDUE"))
 				.andExpect(jsonPath("$[0].ancestors").doesNotExist());

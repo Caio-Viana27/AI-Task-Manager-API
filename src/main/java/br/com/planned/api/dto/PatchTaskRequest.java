@@ -4,6 +4,8 @@ import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Set;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
@@ -14,14 +16,15 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * {@code PATCH /api/v1/tasks/{id}} (wave 2, D2): an absent field is left unchanged, and an explicit
- * {@code null} clears it. Only {@code dueDate} and {@code complexity} can be cleared; {@code null}
+ * {@code null} clears it. Only {@code dueDate}, {@code complexity}, and {@code estimatedHours} can be
+ * cleared; {@code null}
  * for any other field is a validation error.
  *
  * <p>A class rather than a record of {@code Optional}s, because Jackson 3 maps both an absent
  * property and an explicit {@code null} to {@code Optional.empty()}. Jackson calls a setter only
  * for a property that is in the body, so each setter records that its field was sent.
  */
-@Schema(description = "Any subset of the PUT fields. Absent = unchanged; null clears dueDate or complexity.")
+@Schema(description = "Any subset of the PUT fields. Absent = unchanged; null clears dueDate, complexity, or estimatedHours.")
 @NotNullWhenPresent({ PatchTaskRequest.TITLE, PatchTaskRequest.DESCRIPTION, PatchTaskRequest.PRIORITY,
 		PatchTaskRequest.STATUS })
 public class PatchTaskRequest implements PresenceTracking {
@@ -32,6 +35,7 @@ public class PatchTaskRequest implements PresenceTracking {
 	public static final String PRIORITY = "priority";
 	public static final String STATUS = "status";
 	public static final String COMPLEXITY = "complexity";
+	public static final String ESTIMATED_HOURS = "estimatedHours";
 
 	private final Set<String> present = new HashSet<>();
 
@@ -56,6 +60,11 @@ public class PatchTaskRequest implements PresenceTracking {
 
 	@Schema(example = "MEDIUM", description = "EASY, MEDIUM, HARD, or null to clear it")
 	private String complexity;
+
+	@Schema(example = "8", minimum = "1", maximum = "999", description = "Whole hours, 1 to 999, or null to clear it")
+	@Min(1)
+	@Max(999)
+	private Integer estimatedHours;
 
 	/** @return whether the body contained {@code field} (one of this class's field-name constants) */
 	@Override
@@ -115,5 +124,14 @@ public class PatchTaskRequest implements PresenceTracking {
 	public void setComplexity(String complexity) {
 		this.complexity = complexity;
 		present.add(COMPLEXITY);
+	}
+
+	public Integer getEstimatedHours() {
+		return estimatedHours;
+	}
+
+	public void setEstimatedHours(Integer estimatedHours) {
+		this.estimatedHours = estimatedHours;
+		present.add(ESTIMATED_HOURS);
 	}
 }

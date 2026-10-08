@@ -9,7 +9,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * One item of {@code POST /api/v1/tasks/{id}/subtasks} (PLAN §4). Same fields, validation, and
- * defaults as a task create ({@link CreateTaskRequest}).
+ * defaults as a task create ({@link CreateTaskRequest}), except {@code estimatedHours}: a subtask
+ * create does not take it (wave 4, D10).
  */
 public record CreateSubtaskRequest(
 		@Schema(example = "Collect the numbers", maxLength = 100)
@@ -28,6 +29,6 @@ public record CreateSubtaskRequest(
 		String complexity) {
 
 	public CreateTaskRequest toCreateTaskRequest() {
-		return new CreateTaskRequest(title, description, dueDate, priority, complexity);
+		return new CreateTaskRequest(title, description, dueDate, priority, complexity, null);
 	}
 }

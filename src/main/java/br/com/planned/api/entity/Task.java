@@ -68,6 +68,10 @@ public class Task {
 	@JoinColumn(name = "complexity_id")
 	private Complexity complexity;
 
+	/** Estimated effort in whole hours, 1 to 999, or {@code null} when not estimated (wave 4, D10). */
+	@Column(name = "estimated_hours")
+	private Integer estimatedHours;
+
 	/** {@code null} for a top-level task. */
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "parent_task_id", updatable = false)
