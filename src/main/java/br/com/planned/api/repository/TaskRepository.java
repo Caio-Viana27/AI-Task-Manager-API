@@ -23,6 +23,11 @@ import br.com.planned.api.entity.TaskStatus;
 /** Every lookup is scoped to the owner: another user's task is never found (PLAN §2, 404). */
 public interface TaskRepository extends JpaRepository<Task, UUID>, JpaSpecificationExecutor<Task> {
 
+	/**
+	 * The task with its priority, status, and complexity loaded, so callers outside a transaction
+	 * (e.g. the AI services) can read their names.
+	 */
+	@EntityGraph(attributePaths = { "priority", "status", "complexity" })
 	Optional<Task> findByIdAndUserId(UUID id, UUID userId);
 
 	/**
