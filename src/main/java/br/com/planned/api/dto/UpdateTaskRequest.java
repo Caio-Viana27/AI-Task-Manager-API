@@ -2,6 +2,8 @@ package br.com.planned.api.dto;
 
 import java.time.LocalDate;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -9,8 +11,8 @@ import jakarta.validation.constraints.Size;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * {@code PUT /api/v1/tasks/{id}}: replaces every editable field. A {@code null} {@code dueDate} or
- * {@code complexity} clears it; the other fields are required.
+ * {@code PUT /api/v1/tasks/{id}}: replaces every editable field. A {@code null} {@code dueDate},
+ * {@code complexity}, or {@code estimatedHours} clears it; the other fields are required.
  */
 public record UpdateTaskRequest(
 		@Schema(example = "Write the quarterly report", maxLength = 100)
@@ -29,5 +31,8 @@ public record UpdateTaskRequest(
 		@NotNull String status,
 
 		@Schema(example = "MEDIUM", description = "EASY, MEDIUM, HARD, or null to clear it")
-		String complexity) {
+		String complexity,
+
+		@Schema(example = "8", minimum = "1", maximum = "999", description = "Estimated effort in whole hours, 1 to 999, or null to clear it")
+		@Min(1) @Max(999) Integer estimatedHours) {
 }

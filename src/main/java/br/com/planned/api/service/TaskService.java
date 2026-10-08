@@ -88,6 +88,7 @@ public class TaskService {
 		task.setPriority(lookupService.priority(request.priority()));
 		task.setStatus(userStatus(request.status()));
 		task.setComplexity(complexityOrNull(request.complexity()));
+		task.setEstimatedHours(request.estimatedHours());
 		return saveAndCompleteSubtree(task, wasDone);
 	}
 
@@ -113,6 +114,9 @@ public class TaskService {
 		}
 		if (request.isPresent(PatchTaskRequest.COMPLEXITY)) {
 			task.setComplexity(complexityOrNull(request.getComplexity()));
+		}
+		if (request.isPresent(PatchTaskRequest.ESTIMATED_HOURS)) {
+			task.setEstimatedHours(request.getEstimatedHours());
 		}
 		return saveAndCompleteSubtree(task, wasDone);
 	}
@@ -151,6 +155,7 @@ public class TaskService {
 				lookupService.status(TaskStatus.TODO), Instant.now(clock));
 		task.setDueDate(request.dueDate());
 		task.setComplexity(complexityOrNull(request.complexity()));
+		task.setEstimatedHours(request.estimatedHours());
 		applyOverdueRule(task);
 		return task;
 	}

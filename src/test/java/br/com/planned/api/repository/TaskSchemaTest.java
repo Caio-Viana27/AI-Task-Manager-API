@@ -7,6 +7,8 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -87,6 +89,27 @@ class TaskSchemaTest extends IntegrationTest {
 
 		assertThat(jdbc.queryForObject("SELECT POSITION FROM TASK WHERE ID = ?", Integer.class, id)).isZero();
 		assertThat(jdbc.queryForObject("SELECT DUE_DATE FROM TASK WHERE ID = ?", Object.class, id)).isNull();
+	}
+
+	@ParameterizedTest
+	@ValueSource(ints = { 0, 1000, -1 })
+	void estimatedHoursOutOfRangeIsRejected(int hours) {
+		UUID id = TestRows.insertTask(jdbc, userId, null, "Task");
+
+		assertThatThrownBy(() -> jdbc.update("UPDATE TASK SET ESTIMATED_HOURS = ? WHERE ID = ?", hours, id))
+				.isInstanceOf(DataIntegrityViolationException.class)
+				.hasMessageContaining("ck_task_estimated_hours_range");
+	}
+
+	@Test
+	void estimatedHoursAcceptsNullAndTheBoundaries() {
+		UUID id = TestRows.insertTask(jdbc, userId, null, "Task");
+
+		assertThat(jdbc.queryForObject("SELECT ESTIMATED_HOURS FROM TASK WHERE ID = ?", Integer.class, id)).isNull();
+		jdbc.update("UPDATE TASK SET ESTIMATED_HOURS = 1 WHERE ID = ?", id);
+		jdbc.update("UPDATE TASK SET ESTIMATED_HOURS = 999 WHERE ID = ?", id);
+		assertThat(jdbc.queryForObject("SELECT ESTIMATED_HOURS FROM TASK WHERE ID = ?", Integer.class, id))
+				.isEqualTo(999);
 	}
 
 	@Test

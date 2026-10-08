@@ -2,6 +2,8 @@ package br.com.planned.api.dto;
 
 import java.time.LocalDate;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -25,5 +27,8 @@ public record CreateTaskRequest(
 		String priority,
 
 		@Schema(example = "MEDIUM", description = "EASY, MEDIUM, HARD, or null (the default)")
-		String complexity) {
+		String complexity,
+
+		@Schema(example = "8", minimum = "1", maximum = "999", description = "Optional estimated effort in whole hours, 1 to 999")
+		@Min(1) @Max(999) Integer estimatedHours) {
 }

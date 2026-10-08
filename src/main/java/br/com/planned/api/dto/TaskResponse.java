@@ -24,6 +24,8 @@ public record TaskResponse(
 		String priority,
 		String status,
 		String complexity,
+		@Schema(example = "8", description = "Estimated effort in whole hours (1 to 999), or null")
+		Integer estimatedHours,
 		UUID parentTaskId,
 		@Schema(description = "Root first; only in GET /tasks/{id}")
 		@JsonInclude(JsonInclude.Include.NON_NULL) List<AncestorSummary> ancestors,
@@ -53,6 +55,7 @@ public record TaskResponse(
 				task.getPriority().getName(),
 				task.getStatus().getName(),
 				task.getComplexity() == null ? null : task.getComplexity().getName(),
+				task.getEstimatedHours(),
 				task.getParent() == null ? null : task.getParent().getId(),
 				ancestors,
 				canAddSubtasks,

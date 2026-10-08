@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.aMapWithSize;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -201,6 +202,7 @@ class TaskControllerTest extends IntegrationTest {
 						  "priority": "MEDIUM",
 						  "status": "TODO",
 						  "complexity": null,
+						  "estimatedHours": null,
 						  "parentTaskId": null,
 						  "ancestors": [],
 						  "canAddSubtasks": true,
@@ -513,6 +515,157 @@ class TaskControllerTest extends IntegrationTest {
 		perform(get("/api/v1/tasks/" + task), ana)
 				.andExpect(jsonPath("$.title").value("Task"))
 				.andExpect(jsonPath("$.status").value("TODO"));
+	}
+
+	// --- Estimated hours (wave 4, D10) ---
+
+	@Test
+	void create_withEstimatedHours_savesAndReturnsThem() throws Exception {
+		String body = perform(post("/api/v1/tasks"), ana, """
+				{ "title": "Task", "description": "d", "estimatedHours": 8 }
+				""")
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.estimatedHours").value(8))
+				.andReturn().getResponse().getContentAsString();
+		UUID id = UUID.fromString(JsonPath.read(body, "$.id"));
+
+		perform(get("/api/v1/tasks/" + id), ana)
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.estimatedHours").value(8));
+		assertThat(jdbc.queryForObject("SELECT ESTIMATED_HOURS FROM TASK WHERE ID = ?", Integer.class, id))
+				.isEqualTo(8);
+	}
+
+	@Test
+	void create_withoutEstimatedHours_returnsNull() throws Exception {
+		UUID id = createTask(ana, "Task");
+
+		perform(get("/api/v1/tasks/" + id), ana)
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.estimatedHours").value(nullValue()))
+				.andExpect(jsonPath("$.estimatedHours").hasJsonPath());
+		assertThat(jdbc.queryForObject("SELECT ESTIMATED_HOURS FROM TASK WHERE ID = ?", Integer.class, id))
+				.isNull();
+	}
+
+	@Test
+	void create_acceptsTheBoundaries() throws Exception {
+		perform(post("/api/v1/tasks"), ana, "{ \"title\": \"t\", \"description\": \"d\", \"estimatedHours\": 1 }")
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.estimatedHours").value(1));
+		perform(post("/api/v1/tasks"), ana, "{ \"title\": \"t\", \"description\": \"d\", \"estimatedHours\": 999 }")
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.estimatedHours").value(999));
+	}
+
+	@Test
+	void create_withOutOfRangeEstimatedHours_returns400NamingIt() throws Exception {
+		for (String hours : List.of("0", "1000", "-1")) {
+			perform(post("/api/v1/tasks"), ana, """
+					{ "title": "t", "description": "d", "estimatedHours": %s }
+					""".formatted(hours))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+					.andExpect(jsonPath("$.errors[0].field").value("estimatedHours"));
+		}
+		assertThat(taskCount(ana)).isZero();
+	}
+
+	@Test
+	void nonIntegerEstimatedHours_returns400OnEveryWrite() throws Exception {
+		UUID task = createTask(ana, "Task", ", \"estimatedHours\": 3");
+
+		for (String hours : List.of("2.5", "\"abc\"", "true")) {
+			perform(post("/api/v1/tasks"), ana, """
+					{ "title": "t", "description": "d", "estimatedHours": %s }
+					""".formatted(hours))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+			perform(put("/api/v1/tasks/" + task), ana, """
+					{ "title": "Task", "description": "description", "priority": "MEDIUM",
+					  "status": "TODO", "estimatedHours": %s }
+					""".formatted(hours))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+			perform(patch("/api/v1/tasks/" + task), ana, "{ \"estimatedHours\": %s }".formatted(hours))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+		}
+		assertThat(taskCount(ana)).isOne();
+		perform(get("/api/v1/tasks/" + task), ana).andExpect(jsonPath("$.estimatedHours").value(3));
+	}
+
+	@Test
+	void put_setsAndClearsEstimatedHours() throws Exception {
+		UUID task = createTask(ana, "Task");
+
+		perform(put("/api/v1/tasks/" + task), ana, """
+				{ "title": "Task", "description": "description", "priority": "MEDIUM",
+				  "status": "TODO", "estimatedHours": 12 }
+				""")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.estimatedHours").value(12));
+		perform(get("/api/v1/tasks/" + task), ana).andExpect(jsonPath("$.estimatedHours").value(12));
+
+		perform(put("/api/v1/tasks/" + task), ana, fullBody("TODO", "MEDIUM", null))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.estimatedHours").isEmpty());
+	}
+
+	@Test
+	void put_withOutOfRangeEstimatedHours_returns400() throws Exception {
+		UUID task = createTask(ana, "Task", ", \"estimatedHours\": 3");
+
+		for (String hours : List.of("0", "1000")) {
+			perform(put("/api/v1/tasks/" + task), ana, """
+					{ "title": "Task", "description": "description", "priority": "MEDIUM",
+					  "status": "TODO", "estimatedHours": %s }
+					""".formatted(hours))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+					.andExpect(jsonPath("$.errors[0].field").value("estimatedHours"));
+		}
+		perform(get("/api/v1/tasks/" + task), ana).andExpect(jsonPath("$.estimatedHours").value(3));
+	}
+
+	@Test
+	void patch_estimatedHours_setsClearsAndLeavesIt() throws Exception {
+		UUID task = createTask(ana, "Task", """
+				, "dueDate": "2026-10-20", "priority": "HIGH", "complexity": "EASY" """);
+		String before = getBody(task);
+		CLOCK.advance(Duration.ofMinutes(1));
+
+		String afterSet = perform(patch("/api/v1/tasks/" + task), ana, "{ \"estimatedHours\": 5 }")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.estimatedHours").value(5))
+				.andReturn().getResponse().getContentAsString();
+		assertSameExcept(before, afterSet, "estimatedHours", "updatedAt");
+
+		perform(patch("/api/v1/tasks/" + task), ana, "{ \"title\": \"Renamed\" }")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.title").value("Renamed"))
+				.andExpect(jsonPath("$.estimatedHours").value(5));
+
+		perform(patch("/api/v1/tasks/" + task), ana, "{ \"estimatedHours\": null }")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.estimatedHours").isEmpty())
+				.andExpect(jsonPath("$.complexity").value("EASY"));
+		assertThat(jdbc.queryForObject("SELECT ESTIMATED_HOURS FROM TASK WHERE ID = ?", Integer.class, task))
+				.isNull();
+	}
+
+	@Test
+	void patch_withOutOfRangeEstimatedHours_returns400NamingIt() throws Exception {
+		UUID task = createTask(ana, "Task", ", \"estimatedHours\": 3");
+
+		for (String hours : List.of("0", "1000")) {
+			perform(patch("/api/v1/tasks/" + task), ana, "{ \"estimatedHours\": %s }".formatted(hours))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+					.andExpect(jsonPath("$.errors", hasSize(1)))
+					.andExpect(jsonPath("$.errors[0].field").value("estimatedHours"));
+		}
+		perform(get("/api/v1/tasks/" + task), ana).andExpect(jsonPath("$.estimatedHours").value(3));
 	}
 
 	// --- Overdue on write, D4 ---
