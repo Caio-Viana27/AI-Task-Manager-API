@@ -104,6 +104,32 @@ public interface TaskRepository extends JpaRepository<Task, UUID>, JpaSpecificat
 	List<SubtaskCount> countChildren(@Param("parentIds") Collection<UUID> parentIds);
 
 	/**
+	 * The user's tasks that aren't {@code done}, at any depth, most urgent first, for the chat
+	 * prompt (wave 4, D4): {@code overdue} first, then {@code dueDate} ascending with nulls last,
+	 * then priority descending (by id, wave 2 D3), then {@code createdAt} desc and {@code id}.
+	 * Status, priority, complexity, and parent are loaded. Pass the page size as the limit.
+	 */
+	@Query("""
+			SELECT t FROM Task t
+			JOIN FETCH t.status
+			JOIN FETCH t.priority
+			LEFT JOIN FETCH t.complexity
+			LEFT JOIN FETCH t.parent
+			WHERE t.user.id = :userId AND t.status <> :done
+			ORDER BY CASE WHEN t.status = :overdue THEN 0 ELSE 1 END,
+			         t.dueDate ASC NULLS LAST,
+			         t.priority.id DESC,
+			         t.createdAt DESC,
+			         t.id ASC
+			""")
+	List<Task> findChatContext(@Param("userId") UUID userId, @Param("done") TaskStatus done,
+			@Param("overdue") TaskStatus overdue, Pageable pageable);
+
+	/** The number of the user's tasks that aren't {@code done}: the rows {@link #findChatContext} picks from. */
+	@Query("SELECT COUNT(t) FROM Task t WHERE t.user.id = :userId AND t.status <> :done")
+	long countOpen(@Param("userId") UUID userId, @Param("done") TaskStatus done);
+
+	/**
 	 * Deletes the task if {@code userId} owns it. One statement: the {@code ON DELETE CASCADE} on
 	 * {@code PARENT_TASK_ID} removes the whole subtree (wave 2, D1).
 	 *
